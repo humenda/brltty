@@ -1990,10 +1990,12 @@ initializeBrailleDriver (const char *code, int verify) {
 
 static int
 activateBrailleDriver (int verify) {
-  int oneDevice = brailleDevices[0] && !brailleDevices[1];
   const char *const *device = (const char *const *)brailleDevices;
 
-  if (!oneDevice) verify = 0;
+  /* Keep verifying even when several devices are specified. Verification
+   * constructs no driver and needs no device. Constructing the driver here
+   * would start braille input before a screen provides a command context.
+   */
 
   while (*device) {
     const char *const *autodetectableDrivers = NULL;
