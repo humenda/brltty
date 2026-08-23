@@ -440,7 +440,7 @@ hid.$O:
 $(HID_OBJECT).$O:
 	$(CC) $(LIBCFLAGS) $(HID_INCLUDES) -c $(SRC_DIR)/$(HID_OBJECT).c
 
-BRLTTY_HID_OBJECTS = brltty-hid.$O $(PROGRAM_OBJECTS) $(HID_OBJECTS) hid_inspect.$O hid_tables.$O
+BRLTTY_HID_OBJECTS = brltty-hid.$O $(PROGRAM_OBJECTS) $(HID_OBJECTS) hid_inspect.$O
 
 brltty-hid$X: $(BRLTTY_HID_OBJECTS)
 	$(CC) $(LDFLAGS) -o $@ $(BRLTTY_HID_OBJECTS) $(HID_LIBS) $(LDLIBS)
