@@ -27,9 +27,13 @@
 #include "log.h"
 #include "strfmt.h"
 #include "parse.h"
+#include "file.h"
 #include "io_hid.h"
 #include "hid_items.h"
 #include "hid_inspect.h"
+#include "hid_braille.h"
+
+static char *opt_itemsFile;
 
 static int opt_matchUSBDevices;
 static int opt_matchBluetoothDevices;
@@ -52,6 +56,12 @@ static int opt_showHostDevice;
 
 static int opt_listItems;
 static int opt_listReports;
+
+static int opt_showBrailleDisplay;
+static int opt_testBrailleDisplay;
+
+static char *opt_brailleCells;
+static char *opt_brailleInput;
 
 static char *opt_readReport;
 static char *opt_readFeature;
@@ -166,6 +176,39 @@ BEGIN_COMMAND_LINE_OPTIONS(programOptions)
     .description = strtext("List each report's identifier and sizes.")
   },
 
+  { .word = "items-file",
+    .letter = 'f',
+    .argument = strtext("file"),
+    .setting.string = &opt_itemsFile,
+    .description = strtext("Read the HID report descriptor from this file rather than from a device.")
+  },
+
+  { .word = "show-braille-display",
+    .letter = 'B',
+    .setting.flag = &opt_showBrailleDisplay,
+    .description = strtext("Show how the HID report descriptor describes a braille display.")
+  },
+
+  { .word = "test-braille-display",
+    .letter = 'T',
+    .setting.flag = &opt_testBrailleDisplay,
+    .description = strtext("Exit successfully if, and only if, the device is a HID braille display.")
+  },
+
+  { .word = "braille-cells",
+    .letter = 'c',
+    .argument = strtext("bytes"),
+    .setting.string = &opt_brailleCells,
+    .description = strtext("Show the output report which would render these braille cells (see below).")
+  },
+
+  { .word = "braille-input",
+    .letter = 'i',
+    .argument = strtext("bytes"),
+    .setting.string = &opt_brailleInput,
+    .description = strtext("Show how this input report would be interpreted (see below).")
+  },
+
   { .word = "read-report",
     .letter = 'r',
     .argument = strtext("identifier"),
@@ -212,10 +255,11 @@ BEGIN_COMMAND_LINE_PARAMETERS(programParameters)
 END_COMMAND_LINE_PARAMETERS(programParameters)
 
 BEGIN_COMMAND_LINE_NOTES(programNotes)
-  "When writing a report or feature, the bytes don't need to be, but can be, separated from one another by whitespace.",
+  "Bytes may be separated from one another by whitespace.",
   "Each byte is either two hexadecimal digits or zero or more braille dot numbers within [square brackets].",
   "A byte may optionally be followed by an asterisk [*] and a decimal count - if not specified, 1 is assumed.",
-  "The first byte is the report number - specify 00 for no report number.",
+  "When writing a report or feature, or when interpreting an input report, the first byte is the report number. Specify 00 for no report number.",
+  "The bytes given for the braille cells are the cells themselves. The report descriptor supplies the report number.",
 END_COMMAND_LINE_NOTES
 
 BEGIN_COMMAND_LINE_DESCRIPTOR(programDescriptor)
@@ -285,11 +329,47 @@ openDevice (HidDevice **device) {
   return hidOpenDeviceWithFilter(device, &filter);
 }
 
+static HidItemsDescriptor *fileItems = NULL;
+
 static const HidItemsDescriptor *
 getItems (HidDevice *device) {
+  if (fileItems) return fileItems;
+
   const HidItemsDescriptor *items = hidGetItems(device);
   if (!items) logMessage(LOG_ERR, "HID items not available");
   return items;
+}
+
+#define ITEMS_FILE_LIMIT 0X1000
+
+static int
+readItemsFile (const char *path) {
+  FILE *file = openFile(path, "rb", 0);
+  if (!file) return 0;
+
+  unsigned char buffer[ITEMS_FILE_LIMIT];
+  size_t count = fread(buffer, 1, sizeof(buffer), file);
+  int ok = 0;
+
+  if (ferror(file)) {
+    logMessage(LOG_ERR, "cannot read HID items file: %s", path);
+  } else if (!count) {
+    logMessage(LOG_ERR, "HID items file is empty: %s", path);
+  } else if (!feof(file)) {
+    logMessage(LOG_ERR,
+      "HID items file is longer than %u bytes: %s", ITEMS_FILE_LIMIT, path
+    );
+  } else if (!(fileItems = malloc(sizeof(*fileItems) + count))) {
+    logMallocError();
+  } else {
+    memset(fileItems, 0, sizeof(*fileItems));
+    fileItems->count = count;
+    memcpy(fileItems->bytes, buffer, count);
+    ok = 1;
+  }
+
+  fclose(file);
+  return ok;
 }
 
 static int
@@ -446,6 +526,134 @@ performListReports (HidDevice *device) {
 
   free(reports);
   return 1;
+}
+
+static unsigned char brailleCellsBuffer[HID_BRL_CELL_LIMIT];
+static size_t brailleCellsLength;
+
+static unsigned char brailleInputBuffer[0X100];
+static size_t brailleInputLength;
+
+static int
+brailleDescriptionLister (const char *line, void *data) {
+  putf("%s\n", line);
+  return 1;
+}
+
+static int
+performShowBrailleDisplay (HidDevice *device) {
+  const HidItemsDescriptor *items = getItems(device);
+  if (!items) return 0;
+
+  if (!hidBrailleTestItems(items)) {
+    logMessage(LOG_ERR, "not a HID braille display");
+    return 0;
+  }
+
+  HidBrailleDescription *description = hidBrailleNewDescription(items);
+  if (!description) return 0;
+
+  hidBrailleListDescription(description, brailleDescriptionLister, NULL);
+  hidBrailleDestroyDescription(description);
+  return 1;
+}
+
+/* Report via the exit status only. A udev rule uses this. It can't match on a
+ * usage page.
+ */
+static int
+performTestBrailleDisplay (HidDevice *device) {
+  const HidItemsDescriptor *items = getItems(device);
+  if (!items) return 0;
+  return hidBrailleTestItems(items);
+}
+
+static HidBrailleDescription *
+getBrailleDescription (HidDevice *device) {
+  const HidItemsDescriptor *items = getItems(device);
+  if (!items) return NULL;
+
+  if (!hidBrailleTestItems(items)) {
+    logMessage(LOG_ERR, "not a HID braille display");
+    return NULL;
+  }
+
+  return hidBrailleNewDescription(items);
+}
+
+static int
+performBrailleCells (HidDevice *device) {
+  HidBrailleDescription *description = getBrailleDescription(device);
+  if (!description) return 0;
+
+  size_t size = description->cells.reportSize;
+  unsigned char report[size];
+  int ok = 0;
+
+  if (hidBrailleMakeCellsReport(description, brailleCellsBuffer, brailleCellsLength, report, size)) {
+    writeBytesLine("Braille Cells Report: %02X", report, size, report[0]);
+    ok = 1;
+  }
+
+  hidBrailleDestroyDescription(description);
+  return ok;
+}
+
+static int
+performBrailleInput (HidDevice *device) {
+  HidBrailleDescription *description = getBrailleDescription(device);
+  if (!description) return 0;
+
+  HidBrailleInput input;
+  memset(&input, 0, sizeof(input));
+
+  int ok = hidBrailleDecodeInput(
+    description, brailleInputBuffer, brailleInputLength, &input
+  );
+
+  if (ok) {
+    {
+      char line[0X100];
+      STR_BEGIN(line, sizeof(line));
+      STR_PRINTF("Braille Buttons:");
+
+      for (unsigned int number=0; number<HID_BRL_BUTTON_COUNT; number+=1) {
+        if (!(input.buttons & (UINT32_C(1) << number))) continue;
+
+        HidUnsignedValue usage = hidBrailleButtonUsage(number);
+        const char *name = hidBrailleGetUsageName(usage);
+        STR_PRINTF(" %s", (name? name: "?"));
+      }
+
+      STR_END;
+      putf("%s\n", line);
+    }
+
+    {
+      char line[0X100];
+      STR_BEGIN(line, sizeof(line));
+      STR_PRINTF("Braille Router Keys:");
+
+      unsigned int keyCount = description->routerSetCount?
+                              description->routerSets[0].keyCount: 0;
+
+      for (unsigned int key=0; key<keyCount; key+=1) {
+        if (input.routerKeys[key / 8] & (1 << (key % 8))) STR_PRINTF(" %u", key);
+      }
+
+      STR_END;
+      putf("%s\n", line);
+    }
+
+    if (input.haveCellCount) putf("Braille Cell Count: %u\n", input.cellCount);
+
+    if (input.haveScreenReaderControl) {
+      putf("Braille Screen Reader Control: %"PRIu32 "\n", input.screenReaderControl);
+    }
+  }
+
+  hidBrailleDestroyDescription(description);
+  return ok;
 }
 
 static int
@@ -754,6 +962,22 @@ static unsigned char writeReportBuffer[0X1000];
 static size_t writeReportLength;
 
 static int
+parseBrailleCells (void) {
+  return parseBytes(
+    opt_brailleCells, "braille cells", brailleCellsBuffer,
+    ARRAY_COUNT(brailleCellsBuffer), &brailleCellsLength
+  );
+}
+
+static int
+parseBrailleInput (void) {
+  return parseBytes(
+    opt_brailleInput, "braille input report", brailleInputBuffer,
+    ARRAY_COUNT(brailleInputBuffer), &brailleInputLength
+  );
+}
+
+static int
 parseWriteReport (void) {
   return parseBytes(
     opt_writeReport, "output report", writeReportBuffer,
@@ -936,6 +1160,12 @@ parseOperands (void) {
     { .parse = parseWriteFeature,
     },
 
+    { .parse = parseBrailleCells,
+    },
+
+    { .parse = parseBrailleInput,
+    },
+
     { .parse = parseInputTimeout,
     },
   };
@@ -956,6 +1186,7 @@ performActions (HidDevice *device) {
   typedef struct {
     int (*perform) (HidDevice *device);
     unsigned char isFlag:1;
+    unsigned char needsDevice:1;
 
     union {
       char **string;
@@ -966,26 +1197,31 @@ performActions (HidDevice *device) {
   static const ActionEntry actionTable[] = {
     { .perform = performShowDeviceIdentifiers,
       .isFlag = 1,
+      .needsDevice = 1,
       .option.flag = &opt_showDeviceIdentifiers,
     },
 
     { .perform = performShowDeviceAddress,
       .isFlag = 1,
+      .needsDevice = 1,
       .option.flag = &opt_showDeviceAddress,
     },
 
     { .perform = performShowDeviceName,
       .isFlag = 1,
+      .needsDevice = 1,
       .option.flag = &opt_showDeviceName,
     },
 
     { .perform = performShowHostPath,
       .isFlag = 1,
+      .needsDevice = 1,
       .option.flag = &opt_showHostPath,
     },
 
     { .perform = performShowHostDevice,
       .isFlag = 1,
+      .needsDevice = 1,
       .option.flag = &opt_showHostDevice,
     },
 
@@ -999,24 +1235,47 @@ performActions (HidDevice *device) {
       .option.flag = &opt_listReports,
     },
 
+    { .perform = performShowBrailleDisplay,
+      .isFlag = 1,
+      .option.flag = &opt_showBrailleDisplay,
+    },
+
+    { .perform = performTestBrailleDisplay,
+      .isFlag = 1,
+      .option.flag = &opt_testBrailleDisplay,
+    },
+
+    { .perform = performBrailleCells,
+      .option.string = &opt_brailleCells,
+    },
+
+    { .perform = performBrailleInput,
+      .option.string = &opt_brailleInput,
+    },
+
     { .perform = performReadReport,
+      .needsDevice = 1,
       .option.string = &opt_readReport,
     },
 
     { .perform = performReadFeature,
+      .needsDevice = 1,
       .option.string = &opt_readFeature,
     },
 
     { .perform = performWriteReport,
+      .needsDevice = 1,
       .option.string = &opt_writeReport,
     },
 
     { .perform = performWriteFeature,
+      .needsDevice = 1,
       .option.string = &opt_writeFeature,
     },
 
     { .perform = performEchoInput,
       .isFlag = 1,
+      .needsDevice = 1,
       .option.flag = &opt_echoInput,
     },
   };
@@ -1034,6 +1293,11 @@ performActions (HidDevice *device) {
     }
 
     if (perform) {
+      if (action->needsDevice && !device) {
+        logMessage(LOG_ERR, "a device is required");
+        return 0;
+      }
+
       if (!action->perform(device)) {
         return 0;
       }
@@ -1053,7 +1317,12 @@ main (int argc, char *argv[]) {
   ProgramExitStatus exitStatus = PROG_EXIT_SUCCESS;
   HidDevice *device = NULL;
 
-  if (!openDevice(&device)) {
+  if (*opt_itemsFile) {
+    // Inspect a report descriptor read from a file. Don't talk to a device.
+    if (!readItemsFile(opt_itemsFile)) return PROG_EXIT_SEMANTIC;
+    if (!performActions(NULL)) exitStatus = PROG_EXIT_FATAL;
+    free(fileItems);
+  } else if (!openDevice(&device)) {
     exitStatus = PROG_EXIT_SYNTAX;
   } else if (!device) {
     logMessage(LOG_ERR, "device not found");
