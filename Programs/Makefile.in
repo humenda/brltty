@@ -1192,7 +1192,38 @@ check-public-headers:
 	@echo checking public headers
 	$(SRC_TOP)chkhdrs $(SRC_TOP)$(HDR_DIR)
 
-check-all: check-text-tables check-contraction-tables check-attributes-tables check-keyboard-tables check-input-tables check-braille-drivers check-speech-drivers check-public-headers
+# Require each *.bad.hid descriptor to be rejected. Require each other *.hid to
+# yield exactly what its *.txt file says. Involve no device.
+HID_BRAILLE_DIRECTORY = $(SRC_TOP)Tools/hidbraille.d
+
+check-hid-braille: all-brltty-hid
+	@echo checking hid braille descriptors
+	set -- $(HID_BRAILLE_DIRECTORY)/*.hid && \
+	for file; do \
+	name=$${file##*/}; \
+	case "$$name" in \
+	*.bad.hid) \
+	if ./brltty-hid$X --items-file "$$file" --show-braille-display >/dev/null 2>&1; \
+	then echo "not rejected: $$name" && exit 11; fi; \
+	;; \
+	*) \
+	./brltty-hid$X --items-file "$$file" --show-braille-display >hid-braille.tmp || exit 11; \
+	diff -u "$${file%.hid}.txt" hid-braille.tmp || exit 11; \
+	rm -f hid-braille.tmp; \
+	;; \
+	esac; \
+	done
+	set -- $(HID_BRAILLE_DIRECTORY)/vectors/*.args && \
+	for file; do \
+	name=$${file##*/}; \
+	name=$${name%.args}; \
+	./brltty-hid$X --items-file "$(HID_BRAILLE_DIRECTORY)/$${name%%.*}.hid" \
+	`cat "$$file"` >hid-braille.tmp || exit 11; \
+	diff -u "$${file%.args}.txt" hid-braille.tmp || exit 11; \
+	rm -f hid-braille.tmp; \
+	done
+
+check-all: check-text-tables check-contraction-tables check-attributes-tables check-keyboard-tables check-input-tables check-braille-drivers check-speech-drivers check-hid-braille check-public-headers
 
 ###############################################################################
 
@@ -1418,6 +1449,7 @@ clean::
 	-rm -f brltty-clip$X xbrlapi$X
 	-rm -f tbl2hex$(X_FOR_BUILD) *test$X *-static$X
 	-rm -f brlapi_constants.h *.$(LIB_EXT) *.$(LIB_EXT).* *.$(ARC_EXT) *.def *.class *.jar
+	-rm -f hid-braille.tmp
 	-rm -f $(BLD_TOP)$(DRV_DIR)/*
 
 distclean::

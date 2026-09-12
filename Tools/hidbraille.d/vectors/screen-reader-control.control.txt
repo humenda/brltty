@@ -1,0 +1,3 @@
+Braille Buttons:
+Braille Router Keys:
+Braille Screen Reader Control: 7

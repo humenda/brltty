@@ -1,0 +1,2 @@
+Braille Buttons: PanLeft RockerDown
+Braille Router Keys:

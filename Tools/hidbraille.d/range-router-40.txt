@@ -1,0 +1,13 @@
+Braille Cells: Rpt:01 Off:0 Siz:8 Cnt:40 Dots:8 Len:41
+Braille Router Set: RouterSet1: Rpt:02 Off:0 Siz:1 Cnt:40
+Braille Button: KeyboardDot1: Rpt:03 Off:0 Key:0
+Braille Button: KeyboardDot2: Rpt:03 Off:1 Key:1
+Braille Button: KeyboardDot3: Rpt:03 Off:2 Key:2
+Braille Button: KeyboardDot4: Rpt:03 Off:3 Key:3
+Braille Button: KeyboardDot5: Rpt:03 Off:4 Key:4
+Braille Button: KeyboardDot6: Rpt:03 Off:5 Key:5
+Braille Button: KeyboardDot7: Rpt:03 Off:6 Key:6
+Braille Button: KeyboardDot8: Rpt:03 Off:7 Key:7
+Braille Button: KeyboardSpace: Rpt:03 Off:8 Key:8
+Braille Input Report: Rpt:02 Len:6
+Braille Input Report: Rpt:03 Len:3

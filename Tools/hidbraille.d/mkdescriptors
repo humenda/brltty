@@ -1,0 +1,340 @@
+#!/usr/bin/env python3
+###############################################################################
+# BRLTTY - A background process providing access to the console screen (when in
+#          text mode) for a blind person using a refreshable braille display.
+#
+# Copyright (C) 1995-2026 by The BRLTTY Developers.
+#
+# BRLTTY comes with ABSOLUTELY NO WARRANTY.
+#
+# This is free software, placed under the terms of the
+# GNU Lesser General Public License, as published by the Free Software
+# Foundation; either version 2.1 of the License, or (at your option) any
+# later version. Please see the file LICENSE-LGPL for details.
+#
+# Web Page: http://brltty.app/
+#
+# This software is maintained by Dave Mielke <dave@mielke.cc>.
+###############################################################################
+
+"""Write the HID report descriptors which check-hid-braille tests against.
+
+Each descriptor is a raw sequence of HID items. This is the format of
+/sys/class/hidraw/hidrawN/device/report_descriptor. A descriptor captured from
+a real device can thus be dropped into this directory.
+
+A descriptor named *.bad.hid is one which brltty-hid must reject.
+"""
+
+import os
+import sys
+
+# Braille display page (0X41) usages.
+BRAILLE_DISPLAY = 0x001
+BRAILLE_ROW = 0x002
+EIGHT_DOT_CELL = 0x003
+SIX_DOT_CELL = 0x004
+CELL_COUNT = 0x005
+SCREEN_READER_CONTROL = 0x006
+SCREEN_READER_IDENTIFIER = 0x007
+ROUTER_SET_1 = 0x0FA
+ROUTER_SET_2 = 0x0FB
+ROUTER_KEY = 0x100
+BRAILLE_BUTTONS = 0x200
+DOT_1 = 0x201
+SPACE = 0x209
+PAN_LEFT = 0x21A
+PAN_RIGHT = 0x21B
+ROCKER_UP = 0x21C
+ROCKER_DOWN = 0x21D
+
+APPLICATION = 0x01
+LOGICAL = 0x02
+
+
+def item(tag, value=None, size=None):
+    if value is None:
+        return bytes([tag])
+
+    if size is None:
+        size = 1 if value <= 0xFF else 2
+
+    return bytes([tag | {1: 1, 2: 2, 4: 3}[size]]) + value.to_bytes(size, "little")
+
+
+def usage_page(value):
+    return item(0x04, value)
+
+
+def usage(value):
+    return item(0x08, value)
+
+
+def usage_minimum(value):
+    return item(0x18, value)
+
+
+def usage_maximum(value):
+    return item(0x28, value)
+
+
+def logical_minimum(value):
+    return item(0x14, value)
+
+
+def logical_maximum(value, size=None):
+    return item(0x24, value, size)
+
+
+def report_size(value):
+    return item(0x74, value)
+
+
+def report_count(value):
+    return item(0x94, value)
+
+
+def report_id(value):
+    return item(0x84, value)
+
+
+def collection(value):
+    return item(0xA0, value)
+
+
+def end_collection():
+    return item(0xC0)
+
+
+def input_item(flags):
+    return item(0x80, flags)
+
+
+def output_item(flags):
+    return item(0x90, flags)
+
+
+def feature_item(flags):
+    return item(0xB0, flags)
+
+
+def push():
+    return item(0xA4)
+
+
+def pop():
+    return item(0xB4)
+
+
+DATA_VARIABLE_ABSOLUTE = 0x02
+CONSTANT_VARIABLE_ABSOLUTE = 0x03
+
+
+def braille_display(*parts):
+    return b"".join(
+        (usage_page(0x41), usage(BRAILLE_DISPLAY), collection(APPLICATION))
+        + parts
+        + (end_collection(),)
+    )
+
+
+def cells(identifier, count, dots=8, per_item=False):
+    cell_usage = EIGHT_DOT_CELL if dots == 8 else SIX_DOT_CELL
+    maximum = 0xFF if dots == 8 else 0x3F
+
+    parts = [usage(BRAILLE_ROW), collection(LOGICAL)]
+    if identifier:
+        parts.insert(0, report_id(identifier))
+
+    parts += [logical_minimum(0), logical_maximum(maximum), report_size(8)]
+
+    if per_item:
+        parts.append(report_count(1))
+        for _ in range(count):
+            parts += [usage(cell_usage), output_item(DATA_VARIABLE_ABSOLUTE)]
+    else:
+        parts += [
+            usage(cell_usage),
+            report_count(count),
+            output_item(DATA_VARIABLE_ABSOLUTE),
+        ]
+
+    parts.append(end_collection())
+    return b"".join(parts)
+
+
+def router_set(identifier, count, set_usage=ROUTER_SET_1, as_range=False):
+    parts = []
+    if identifier:
+        parts.append(report_id(identifier))
+
+    parts += [usage(set_usage), collection(LOGICAL)]
+
+    if as_range:
+        parts += [usage_minimum(ROUTER_KEY), usage_maximum(ROUTER_KEY)]
+    else:
+        parts += [usage(ROUTER_KEY)] * count
+
+    parts += [
+        logical_minimum(0),
+        logical_maximum(1),
+        report_size(1),
+        report_count(count),
+        input_item(DATA_VARIABLE_ABSOLUTE),
+    ]
+
+    padding = -count % 8
+    if padding:
+        parts += [report_count(padding), input_item(CONSTANT_VARIABLE_ABSOLUTE)]
+
+    parts.append(end_collection())
+    return b"".join(parts)
+
+
+def buttons(identifier, usages):
+    parts = []
+    if identifier:
+        parts.append(report_id(identifier))
+
+    parts += [usage(BRAILLE_BUTTONS), collection(LOGICAL)]
+    parts += [usage(value) for value in usages]
+    parts += [
+        logical_minimum(0),
+        logical_maximum(1),
+        report_size(1),
+        report_count(len(usages)),
+        input_item(DATA_VARIABLE_ABSOLUTE),
+    ]
+
+    padding = -len(usages) % 8
+    if padding:
+        parts += [report_count(padding), input_item(CONSTANT_VARIABLE_ABSOLUTE)]
+
+    parts.append(end_collection())
+    return b"".join(parts)
+
+
+def value_field(identifier, value_usage, kind=input_item):
+    parts = []
+    if identifier:
+        parts.append(report_id(identifier))
+
+    parts += [
+        usage(value_usage),
+        logical_minimum(0),
+        logical_maximum(0xFF, size=2),
+        report_size(8),
+        report_count(1),
+        kind(DATA_VARIABLE_ABSOLUTE),
+    ]
+
+    return b"".join(parts)
+
+
+KEYBOARD_USAGES = list(range(DOT_1, DOT_1 + 8)) + [SPACE]
+NAVIGATION_USAGES = [PAN_LEFT, PAN_RIGHT, ROCKER_UP, ROCKER_DOWN]
+
+DESCRIPTORS = {
+    # A conforming twenty cell display, as established by NVDA and BDIOHID. It
+    # has one main item for the cells. It repeats the router key usage once per
+    # cell.
+    "standard-20.hid": braille_display(
+        cells(1, 20),
+        router_set(2, 20),
+        buttons(3, KEYBOARD_USAGES + NAVIGATION_USAGES),
+        value_field(4, CELL_COUNT),
+        value_field(5, SCREEN_READER_IDENTIFIER, feature_item),
+    ),
+    # Six dots, no report identifiers, one main item per cell, and buttons
+    # declared as a usage range rather than as a list.
+    "sixdot-4.hid": braille_display(
+        cells(0, 4, dots=6, per_item=True),
+        b"".join(
+            [
+                usage(BRAILLE_BUTTONS),
+                collection(LOGICAL),
+                usage_minimum(PAN_LEFT),
+                usage_maximum(PAN_RIGHT),
+                logical_minimum(0),
+                logical_maximum(1),
+                report_size(1),
+                report_count(2),
+                input_item(DATA_VARIABLE_ABSOLUTE),
+                report_count(6),
+                input_item(CONSTANT_VARIABLE_ABSOLUTE),
+                end_collection(),
+            ]
+        ),
+    ),
+    # Router keys declared as a usage range. HUTRR78 (HID Usage Tables Review
+    # Request 78) is the USB-IF document which defines the braille display
+    # usage page (0X41). Its sample report descriptor suggests this form. No
+    # known device uses it.
+    "range-router-40.hid": braille_display(
+        cells(1, 40),
+        router_set(2, 40, as_range=True),
+        buttons(3, KEYBOARD_USAGES),
+    ),
+    # Two router sets. Only the first one routes the cursor.
+    "two-router-sets.hid": braille_display(
+        cells(1, 16),
+        router_set(2, 16, ROUTER_SET_1),
+        router_set(3, 16, ROUTER_SET_2),
+    ),
+    # Push and Pop around the cells. The report size and count in effect for
+    # the buttons are the ones from before the push.
+    "pushpop.hid": braille_display(
+        report_id(1),
+        report_size(1),
+        report_count(9),
+        push(),
+        cells(0, 8),
+        pop(),
+        b"".join(
+            [usage(value) for value in KEYBOARD_USAGES]
+            + [
+                logical_minimum(0),
+                logical_maximum(1),
+                input_item(DATA_VARIABLE_ABSOLUTE),
+            ]
+        ),
+    ),
+    # A screen reader control field. No known device sends it.
+    "screen-reader-control.hid": braille_display(
+        cells(1, 12),
+        value_field(2, SCREEN_READER_CONTROL),
+        value_field(3, SCREEN_READER_IDENTIFIER, feature_item),
+    ),
+    # Braille usages but nothing to write cells to.
+    "no-cells.bad.hid": braille_display(buttons(1, KEYBOARD_USAGES)),
+    # Truncated part way through an item.
+    "truncated.bad.hid": (
+        usage_page(0x41)
+        + usage(BRAILLE_DISPLAY)
+        + collection(APPLICATION)
+        + b"\x26\xff"
+    ),
+    # Popped without having been pushed.
+    "unbalanced-pop.bad.hid": braille_display(pop()),
+    # Not a braille display.
+    "keyboard.bad.hid": usage_page(0x01)
+    + usage(0x06)
+    + collection(APPLICATION)
+    + end_collection(),
+}
+
+
+def main():
+    directory = os.path.dirname(os.path.abspath(__file__))
+
+    for name, content in sorted(DESCRIPTORS.items()):
+        path = os.path.join(directory, name)
+
+        with open(path, "wb") as file:
+            file.write(content)
+
+        print("%s: %d bytes" % (name, len(content)), file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

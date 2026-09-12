@@ -1,0 +1,4 @@
+Braille Cells: Rpt:00 Off:0 Siz:8 Cnt:4 Dots:6 Len:5
+Braille Button: PanLeft: Rpt:00 Off:0 Key:25
+Braille Button: PanRight: Rpt:00 Off:1 Key:26
+Braille Input Report: Rpt:00 Len:1

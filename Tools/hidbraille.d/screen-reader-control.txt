@@ -1,0 +1,4 @@
+Braille Cells: Rpt:01 Off:0 Siz:8 Cnt:12 Dots:8 Len:13
+Braille Screen Reader Control: Rpt:02 In Off:0 Siz:8
+Braille Screen Reader Identifier: Rpt:03 Ftr Off:0 Siz:8
+Braille Input Report: Rpt:02 Len:2

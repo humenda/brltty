@@ -1,0 +1,5 @@
+Braille Cells: Rpt:01 Off:0 Siz:8 Cnt:16 Dots:8 Len:17
+Braille Router Set: RouterSet1: Rpt:02 Off:0 Siz:1 Cnt:16
+Braille Router Set: RouterSet2: Rpt:03 Off:0 Siz:1 Cnt:16
+Braille Input Report: Rpt:02 Len:3
+Braille Input Report: Rpt:03 Len:3
