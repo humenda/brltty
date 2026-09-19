@@ -66,6 +66,8 @@ gioInitializeDescriptor (GioDescriptor *descriptor) {
   descriptor->bluetooth.options.inputTimeout = 1000;
   descriptor->bluetooth.options.requestTimeout = 5000;
 
+  descriptor->hid.modelTable = NULL;
+  descriptor->hid.testItems = NULL;
   gioInitializeOptions(&descriptor->hid.options);
   descriptor->hid.options.inputTimeout = 1000;
   descriptor->hid.options.outputTimeout = 1000;

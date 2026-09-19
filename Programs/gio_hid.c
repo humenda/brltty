@@ -187,7 +187,9 @@ static const GioPublicProperties gioPublicProperties_hid = {
 
 static int
 isHidSupported (const GioDescriptor *descriptor) {
-  return !!descriptor->hid.modelTable;
+  if (descriptor->hid.modelTable) return 1;
+  if (descriptor->hid.testItems) return 1;
+  return 0;
 }
 
 static const GioOptions *
@@ -238,6 +240,18 @@ getHidModelEntry (HidDevice *device, const HidModelEntry *model) {
   return NULL;
 }
 
+static int
+testHidItems (HidDevice *device, GioHidTestItemsMethod *testItems) {
+  if (!testItems) return 0;
+
+  const HidItemsDescriptor *items = hidGetItems(device);
+  if (!items) return 0;
+  if (!testItems(items)) return 0;
+
+  logMessage(LOG_CATEGORY(HID_IO), "report descriptor accepted");
+  return 1;
+}
+
 static GioHandle *
 connectHidResource (
   const char *identifier,
@@ -256,6 +270,7 @@ connectHidResource (
         );
 
         if (handle->model) return handle;
+        if (testHidItems(handle->device, descriptor->hid.testItems)) return handle;
       }
     }
 
@@ -269,7 +284,11 @@ connectHidResource (
 
 static int
 prepareHidEndpoint (GioEndpoint *endpoint) {
-  gioSetApplicationData(endpoint, endpoint->handle->model->data);
+  const HidModelEntry *model = endpoint->handle->model;
+
+  // Expect no model when the device was claimed by its report descriptor.
+  gioSetApplicationData(endpoint, (model? model->data: NULL));
+
   return 1;
 }
 

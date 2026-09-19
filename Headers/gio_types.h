@@ -65,6 +65,8 @@ typedef struct {
   unsigned char ignoreWriteTimeouts:1;
 } GioOptions;
 
+typedef int GioHidTestItemsMethod (const HidItemsDescriptor *items);
+
 typedef struct {
   struct {
     const SerialParameters *parameters;
@@ -85,6 +87,13 @@ typedef struct {
 
   struct {
     const HidModelEntry *modelTable;
+
+    /* Claim any HID device whose report descriptor this accepts. Use it for a
+     * driver which implements a standard usage page. Such a driver has no
+     * model to match.
+     */
+    GioHidTestItemsMethod *testItems;
+
     GioOptions options;
   } hid;
 
