@@ -76,6 +76,11 @@ extern ssize_t gioAskResource (
   void *buffer, uint16_t size
 );
 
+/* Return the report descriptor of the endpoint. The endpoint owns it and keeps
+ * it valid until disconnection.
+ */
+extern const HidItemsDescriptor *gioGetHidItems (GioEndpoint *endpoint);
+
 extern int gioGetHidReportSize (
   GioEndpoint *endpoint,
   HidReportIdentifier identifier,

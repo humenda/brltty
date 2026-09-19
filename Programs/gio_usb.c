@@ -281,6 +281,7 @@ static const GioHandleMethods gioUsbMethods = {
   .tellResource = tellUsbResource,
   .askResource = askUsbResource,
 
+  .getHidItems = getUsbHidItems,
   .getHidReportSize = getUsbHidReportSize,
   .getHidReport = getUsbHidReport,
   .setHidReport = setUsbHidReport,

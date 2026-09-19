@@ -493,6 +493,19 @@ gioAskResource (
                 endpoint->options.requestTimeout);
 }
 
+const HidItemsDescriptor *
+gioGetHidItems (GioEndpoint *endpoint) {
+  GioGetHidItemsMethod *method = endpoint->handleMethods->getHidItems;
+
+  if (!method) {
+    logUnsupportedOperation("getHidItems");
+    errno = ENOSYS;
+    return NULL;
+  }
+
+  return method(endpoint->handle, endpoint->options.requestTimeout);
+}
+
 int
 gioGetHidReportSize (
   GioEndpoint *endpoint,

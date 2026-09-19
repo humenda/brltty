@@ -84,7 +84,12 @@ monitorHidInput (GioHandle *handle, AsyncMonitorCallback *callback, void *data) 
   return hidMonitorInput(handle->device, callback, data);
 }
 
-int
+static const HidItemsDescriptor *
+getHidItems (GioHandle *handle, int timeout) {
+  return hidGetItems(handle->device);
+}
+
+static int
 getHidReportSize (
   GioHandle *handle, HidReportIdentifier identifier,
   HidReportSize *size, int timeout
@@ -158,6 +163,7 @@ static const GioHandleMethods gioHidMethods = {
   .readData = readHidData,
   .monitorInput = monitorHidInput,
 
+  .getHidItems = getHidItems,
   .getHidReportSize = getHidReportSize,
   .getHidReport = getHidReport,
   .setHidReport = setHidReport,
