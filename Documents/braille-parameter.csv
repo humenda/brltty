@@ -12,6 +12,8 @@
 "dp","statusCells","yes","[yes,no]"
 "dp","verticalSpacing","2","[0-10] (dots)"
 "eu","protocol","","[auto,azerbraille,clio,eurobraille,notebraille,pupibraille,scriba,esys,esytime,iris,esysiris]"
+"hb","cellCount","","[1-255] (cells)"
+"hb","screenReader","0","[0-65535]"
 "ht","setTime","no","[no,yes]"
 "ir","embedded","","[no,yes]"
 "ir","latchDelay","10","[0-100] (tenths of a second)"

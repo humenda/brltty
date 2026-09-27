@@ -1,0 +1,97 @@
+This driver supports any braille display which conforms to the HID braille
+display usage page (0X41). The USB Implementers Forum standardized this page in
+HID Usage Tables Review Request 78 (HUTRR78). The driver has no knowledge of
+particular models. It reads the HID report descriptor of the display at connect
+time. The descriptor identifies the display and defines its report layout. A
+new conforming display therefore needs no change to this driver.
+
+The display must be reachable via HID. Name it explicitly:
+
+   brltty -b hb -d hid:
+
+Use brltty-hid to see what a display declares and how this driver reads it:
+
+   brltty-hid --list-items --list-reports --show-braille-display
+
+A report descriptor can also be inspected without the display. This helps with
+bug reports:
+
+   cp /sys/class/hidraw/hidraw0/device/report_descriptor display.hid
+   brltty-hid --items-file display.hid --show-braille-display
+
+The same tool shows what would be written to the cells. It also shows what an
+input report would mean. Neither needs a display:
+
+   brltty-hid --items-file display.hid --braille-cells '[125] 00 [12345678]'
+   brltty-hid --items-file display.hid --braille-input '03 01 00'
+
+On Linux, BRLTTY needs read/write access to the /dev/hidrawN device of the
+display. See Autostart/Udev/hid.rules.
+
+What is supported
+================
+
+Output
+   The 8 dot braille cell (0X03) and 6 dot braille cell (0X04) usages of the
+   first braille row (0X02) collection. Eight dots are preferred when a display
+   declares both. Dots 7 and 8 are dropped when only six are available.
+
+Input
+   The braille keyboard dots (0X201 through 0X208), space (0X209), left space
+   (0X20A), right space (0X20B), the joystick (0X210 through 0X214), the d-pad
+   (0X215 through 0X219), panning (0X21A, 0X21B), and the rocker (0X21C through
+   0X21E). Each of them can be bound by name. See Tables/Input/hb/.
+
+Routing keys
+   The router key (0X100) and row router key (0X101) usages of the router set 1
+   (0X0FA), router set 2 (0X0FB), and router set 3 (0X0FC) collections. Only the
+   first set found routes the cursor.
+
+Number of braille cells (0X05)
+   The number of cells of the row which the display uses. The driver honors it
+   whenever the display sends it within an input report. Other screen readers
+   do the same. The braille window is resized accordingly.
+
+Screen reader identifier (0X07)
+   Written to the display once, at connect time. HUTRR78 defines no values for
+   it. The value comes from the screenReader= parameter. It defaults to 0.
+
+Screen reader control (0X06)
+   Offered as the ScreenReaderControl key group. A value can thus be bound to a
+   command. HUTRR78 defines no values for it. None are bound by default.
+
+Parameters
+==========
+
+cellCount
+   Use this many cells rather than as many as the report descriptor declares.
+   This is only needed for a display whose descriptor overstates its size.
+
+screenReader
+   The value to write to the screen reader identifier usage.
+
+Known deviations from HUTRR78
+=============================
+
+These deviations follow what displays do. The implementations in NVDA and
+BDIOHID established them. The sample report descriptor of HUTRR78 suggests
+otherwise.
+
+- The number of cells comes from the report count of the braille cell field.
+  The number of braille cells usage (0X05) reports how many of them are in use.
+  This may be fewer. The driver treats it as advisory.
+
+- A display repeats the router key usage once per cell. It doesn't declare a
+  usage range. The sample report descriptor in HUTRR78 doesn't work as written.
+  Both forms are accepted.
+
+Not supported
+=============
+
+- Bluetooth. Only HID over USB has been implemented.
+
+- More than one braille row. A display which declares several rows is driven as
+  though it had only the first one. The other rows are logged and ignored.
+
+- Router keys which aren't declared consecutively within one report. No known
+  display does this. Such keys are logged and ignored.

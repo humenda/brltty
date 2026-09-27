@@ -71,6 +71,7 @@
 #braille-driver	eu	# EuroBraille
 #braille-driver	fa	# FrankAudiodata
 #braille-driver	fs	# FreedomScientific; VFO, Vispero
+#braille-driver	hb	# HidBraille
 #braille-driver	hd	# Hedo
 #braille-driver	hm	# HIMS
 #braille-driver	ht	# HandyTech; HelpTech
@@ -308,6 +309,10 @@
 
 # HandyTech Braille Driver Parameters
 #braille-parameters ht:setTime=no # [no,yes]
+
+# HidBraille Braille Driver Parameters
+#braille-parameters hb:cellCount= # [1-255] (cells)
+#braille-parameters hb:screenReader=0 # [0-65535]
 
 # Iris Braille Driver Parameters
 #braille-parameters ir:embedded= # [no,yes]

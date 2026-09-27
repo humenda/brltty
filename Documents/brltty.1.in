@@ -762,6 +762,9 @@ Festival
 .B gs
 GenericSay
 .TP 4
+.B hb
+HidBraille
+.TP 4
 .B hd
 Hedo
 .TP 4
