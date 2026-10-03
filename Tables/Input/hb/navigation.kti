@@ -1,0 +1,50 @@
+###############################################################################
+# BRLTTY - A background process providing access to the console screen (when in
+#          text mode) for a blind person using a refreshable braille display.
+#
+# Copyright (C) 1995-2026 by The BRLTTY Developers.
+#
+# BRLTTY comes with ABSOLUTELY NO WARRANTY.
+#
+# This is free software, placed under the terms of the
+# GNU Lesser General Public License, as published by the Free Software
+# Foundation; either version 2.1 of the License, or (at your option) any
+# later version. Please see the file LICENSE-LGPL for details.
+#
+# Web Page: http://brltty.app/
+#
+# This software is maintained by Dave Mielke <dave@mielke.cc>.
+###############################################################################
+
+note The panning keys move the braille window left and right.
+note A rocker does the same, and may also be pressed.
+note A joystick and a d-pad each have four directions and a centre.
+
+bind PanLeft FWINLT
+bind PanRight FWINRT
+
+bind RockerUp FWINLT
+bind RockerDown FWINRT
+bind RockerPress HOME
+bind Space+RockerUp TOP
+bind Space+RockerDown BOT
+
+# A joystick and a d-pad have the same shape. They're bound the same way. A
+# display has one or the other, not both.
+beginVariables
+assign up JoystickUp
+assign down JoystickDown
+assign left JoystickLeft
+assign right JoystickRight
+assign centre JoystickCenter
+include pad.kti
+endVariables
+
+beginVariables
+assign up DPadUp
+assign down DPadDown
+assign left DPadLeft
+assign right DPadRight
+assign centre DPadCenter
+include pad.kti
+endVariables
