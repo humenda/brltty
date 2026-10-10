@@ -1753,6 +1753,7 @@ then
    braille_device=""
    test "${usb_package}" != "none" && braille_device="${braille_device},usb:"
    test "${bluetooth_package}" != "none" && braille_device="${braille_device},bluetooth:"
+   test "${hid_package}" != "none" && braille_device="${braille_device},hid:"
 
    if test -n "${braille_device}"
    then

@@ -41,7 +41,18 @@ LABEL="brltty_hid_bluetooth"
 ENV{.BRLTTY_HID_NAME}="$env{HID_NAME}"
 GOTO="brltty_hid_filter"
 
+##############################################################################
+# A display which conforms to the HID braille display usage page is recognized #
+# by its report descriptor, not by its name. Udev can't match on a usage page. #
+# Therefore, brltty-hid is asked. It reads the descriptor from sysfs. It       #
+# doesn't open the device.                                                     #
+##############################################################################
+
 LABEL="brltty_hid_filter"
+TEST!="/usr/bin/brltty-hid", GOTO="brltty_hid_models"
+PROGRAM=="/usr/bin/brltty-hid --items-file /sys$devpath/../../report_descriptor --test-braille-display", GOTO="brltty_hid_add"
+
+LABEL="brltty_hid_models"
 ENV{.BRLTTY_HID_NAME}=="NLS eReader*", GOTO="brltty_hid_add"
 ENV{.BRLTTY_HID_NAME}=="Brailliant BI 40X*", GOTO="brltty_hid_add"
 ENV{.BRLTTY_HID_NAME}=="Brailliant BI 20X*", GOTO="brltty_hid_add"
